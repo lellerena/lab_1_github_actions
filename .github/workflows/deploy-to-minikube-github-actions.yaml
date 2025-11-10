@@ -8,20 +8,39 @@ jobs:
         name: build Node.js Docker Image and deploy to minikube
         steps:
             - uses: actions/checkout@v2
+
             - name: Start minikube
+              # Se asume que esta acción maneja la instalación de kubectl, etc.
               uses: medyagh/setup-minikube@master
+
             - name: Try the cluster !
               run: kubectl get pods -A
-            - name: Build image
+
+            - name: Build image and push to Minikube's Docker daemon
               run: |
+                  # 1. Configura el shell de Docker para usar el Daemon de Minikube
                   export SHELL=/bin/bash
                   eval $(minikube -p minikube docker-env)
-                  docker build -f ./Dockerfile -t devopshint/node-app:latest .
+
+                  # 2. **IMPORTANTE:** El tag debe ser exactamente el mismo que en k8s-node-app.yaml
+                  docker build -t devopshint/node-app:latest .
                   echo -n "verifying images:"
                   docker images
+
             - name: Deploy to minikube
               run: kubectl apply -f k8s-node-app.yaml
+
+            - name: ⌛ Wait for Deployment to be Ready
+              # Este comando espera hasta que el Deployment haya completado su rollout (Pod está Running/Ready)
+              run: |
+                  echo "Waiting for nodejs-app deployment to be ready..."
+                  kubectl rollout status deployment/nodejs-app --timeout=5m
+
             - name: Test service URLs
               run: |
+                  echo "Listing Minikube services:"
                   minikube service list
+
+                  echo "Accessing Node.js App URL:"
+                  # Intentar obtener la URL, ahora que el pod está listo
                   minikube service nodejs-app --url
